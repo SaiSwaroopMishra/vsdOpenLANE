@@ -613,5 +613,5 @@ I recommend to attend Beginner VLSI/SoC Physical Design using open source EDA to
 
 ## Acknowledgement
 
-Kunal Ghosh, Co-founder (VSD Corp. Pvt. Ltd)
-Nickson Jose, VLSI Engineer
+- Kunal Ghosh, Co-founder (VSD Corp. Pvt. Ltd)
+- Nickson Jose, VLSI Engineer
