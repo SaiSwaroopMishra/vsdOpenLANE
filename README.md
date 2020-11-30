@@ -337,3 +337,281 @@ and go through the exercises.
 
 ## Day 4
 
+Day 4 brings the sky130_inv cell to the openline flow and focus on timing analysis with some concepts of clock tree synthesis. 
+
+### Layout to LEF conversion
+First is introduced the concepts of grid and track in order to understand some guidelines to standard cell height and pins pitch to then generate a LEF view compliant with sky130 technology.
+
+Remember the design steps doing until now on openlane (design setup --> floorplan --> placement). Then, Cell Design give us a .mag file and SPICE related file. The .mag file has lot of details that is not needed for openlane. The PnR flow do not need layout details! So, is necessary to extract a LEF from .mag layout in order to use in PnR OpenLANE flow.
+
+**The first step is to convert grid to track information**
+
+The track information (_tracks.info_ file) is used in routing stage of PnR flow.
+- ports need to be at the intersection of horizontal and vertical tracks.
+- tracks for each interconnection layer is provided in that file.
+
+**Open the layout of sky130_inv on magic as done before and modify the grid to provide track information using below command in tkcon**
+
+        % grid 0.46um 0.34um 0.23um 0.17um
+        
+The syntax of grid command is _grid_ _xSpacing_ _ySpacing_ _xOrigin_ _yOrigin_ and the values are provided from _tracks.info_ for _li1_ interconnection layer that is used for in and out ports.
+
+![s15](https://github.com/britovski/vsdOpenLANE/blob/main/images/s18.PNG)
+
+Then:
+
+        % save sky130_vsdinv.mag
+
+Close and open the Magic again to read the new .mag file and then:
+
+        % lef write
+
+![s16](https://github.com/britovski/vsdOpenLANE/blob/main/images/s19.PNG)
+
+The above command will convert the .mag in a .lef file.
+
+The next step is to copy the generated .lef file in to _src_ folder of picorv32a design.
+
+![s17](https://github.com/britovski/vsdOpenLANE/blob/main/images/s21.PNG)
+
+Also include .lib files in the same _src_ folder for timing analysis (the .lib files can be found at libs folder of _\vsdstdcelldesign_).
+
+You can use my_base.sdc and sta.conf templates provided in extras folder of _\vsdstdcelldesign_.
+
+Now, in order to include the cell on the design flow, you need to include .lef file @ designs/picorv32a/config.tcl setting below variable:
+
+        set ::env(EXTRA_LEFS) [glob $::env(OPENLANE_ROOT)/designs/$::env(DESIGN_NAME)/src/*.lef]
+
+and after design prep @ openlane, do the below commands before run_synthesis.
+
+        set lefs [glob $::env(DESIGN_DIR)/src/*.lef]
+        add_lefs -src $lefs
+
+![s18](https://github.com/britovski/vsdOpenLANE/blob/main/images/s24.PNG)
+
+After run in to the flow steps you can check if the cell is in the merged.lef file.
+
+![s19](https://github.com/britovski/vsdOpenLANE/blob/main/images/s25.PNG)
+
+Before proceed to the next phases you can perform timing analysis for optimization.
+
+### Timing Modeling
+
+Timing modeling is performed with the use of delay tables, that combines *input slews* and *output load* values.
+
+In order to model timing for clock tree structures, is necessary to take care with:
+- at every level, each node drive same load;
+- identical buffers need to be used at same level.
+
+### Synthesis exploration perfoming timing analysis
+- Explore configuration file variables; and
+- Deal with area x delay trade-off.
+
+You can try to change the variables:
+
+        env(SYNTH_STRATEGY)
+        env(SYNTH_BUFFERING)
+        env(SYNTH_SIZING)
+        env(SYNTH_DRIVING_CELL)
+
+and explore, in order to lower SLACK on sta.
+
+### Timing analysis (with ideal clock)
+
+If *T* is the clock period and *Teta* is the combinational logic delay, is necessary that *T > Teta*.
+
+Considering setup time *S* for a capture FF, *Teta < (T-S)*.
+
+Considering clock jitter, is necessary to take care with setup time uncertainty *SU*, so *Teta < (T-S-SU)*.
+
+### Post-synth analysis with OpenSTA
+
+Main configuration file is the _pre_sta.conf_ and you call your _base.sdc_ file on it.
+
+To perform post-synth analysis:
+
+        sta pre_sta.conf
+        
+Recall the env variables shown before, try different configurations in order to lower SLACK time managing delay x area trade-off or to achieve some design goal.
+- use bigger buffers;
+- analyse high load nodes;
+- modify;
+- try/run.
+
+**optimize synthesis before go on!**
+
+### Clock Tree Synthesis (CTS)
+
+The goal of CTS is to put clock skew as low as possible (ideally *0 ps*).
+
+Some techniques are used to achieve a good CTS:
+- H-Tree technique (midpoints to derive clock);
+- Buffering (since H-Tree do not avoid long paths, we need to put buffers);
+- Net shielding (to avoid crosstalk/glitches).
+
+### CTS @ OpenLANE
+
+After post-synth timing analysis and optimizations using sta (called ECO timing optimizations), use the command _write_verilog_ on the openlane console to update synthesis file for openlane with the optimized netlist modified with sta.
+
+        % write_verilog ......../picorv32a.synthesis.v
+        
+then, do synthesis, floorplan and placement again. And it is ready to run CTS:
+
+        % run_cts
+
+![s20](https://github.com/britovski/vsdOpenLANE/blob/main/images/s26.PNG)
+
+CTS is performed by tritonCTS. Make sure to check configurations for CTS (eg. env variable CTS_ROOT_BUFFER)
+
+This step creates a new .v file at ../results/synthesis _picorv32a.synthesis_cts.v_
+
+**Then is possible to perform timing analysis with real clock information**
+
+### Timing analysis (with real clock)
+
+In real timing analysis is necessary to consider clock delays.
+
+Considering the topology of a launch FF connected to a combinational logic circuit and then with a capture FF, *Delta1* been the delay from *CLK* to launch FF, and *Delta2 been the delay from *CLK* to capture FF, *(Teta + Delta1) < [(T + Delta2) - S - SU]*. The first term is the Data Arrival Time (DAT) and the second term is the Data Required Time (DRT). *DRT- DAT* is known as *Slack* and need to be *0* or positive.
+
+You can also do timing analysis considering hold time *H* istead of setup time. In this case, *(Teta + Delta1) > [(T + Delta2) + H + HU]*.
+
+### Timing analysis after CTS @ OpenLANE
+
+After CTS you can use OpenSTA as done before, or use the _openroad_ app from openlane console.
+
+        % openroad
+
+First you need to create a db file using .lef and .def:
+
+        % read_lef ......./tmp/merged.lef
+        % read_def ......./cts/picorv32a.cts.def
+        % write_db pico_cts.db
+ 
+ then read the files for timing purposes:
+ 
+        % read_db pico_cts.db
+        % read_verilog ......./synthesis/picorv32a.synthesis_cts.v
+        % read_liberty -max $::env(LIB_MAX)
+        % read_liberty -min $::env(LIB_MIN)
+        % read_sdc ...../src/my_base.sdc
+ 
+and configure the analysis:
+
+        % set_propagated_clock [all_clocks]
+        % report_checks -path_delay min_max -format full_clock_expanded -digits 4
+        
+**The analysis reported is not corrected! Why?**
+
+liberty data used from -max and -min commands are not real, so you need to use another liberty info.
+
+First, exit openroad:
+
+        % exit
+
+Now you are back in openlane flow. And begin again:
+
+        % openroad
+        % read_db pico_cts.db  --you don´t need to use write commands since .db file is already created 
+        % read_liberty $::env(LIB_SYNTH_COMPLETE) --this is the correct liberty env info.
+        % link_design picorv32a
+        % read_sdc ...../src/my_base.sdc
+        % set_propagated_clock [all_clocks]
+        % report_checks -path_delay min_max -format full_clock_expanded -digits 4
+
+Now, your timing analysis uses real data and is correct.
+
+**you can explore the use of bigger clock buffers and the impact of timing after CTS (eg. env CTS_CLK_BUFFER_LIST)**
+
+**if you want to run CTS again after modifying env variables, you need to back previous .def file (from placement)**
+
+        % set ::env(CURRENT_DEF) ....../XXXXplacement.def
+        
+and repeat again the correct timing analysis using openroad.
+
+**clock skew need to be lower than 10% of clock period, you can check with:**
+
+        % report_clock_skew -hold
+        % report_clock_skew -setup
+ 
+## Day 5
+
+Final workshop day is focused on routing and post-routing.
+
+Also, remember that openlane do not perform power planning at the floorplan phase. This is now, before routing.
+
+### Routing
+Explanation of Maze routing - Lee´s Algorithm
+- creates a routing grid;
+- find best route from a source to a target;
+- automated process*;
+
+### DRC
+- know typical rules;
+- check for DRC violations;
+- make a DRC clean.
+
+### Parasitics Extraction
+- Every physical via is represented at least as an RC circuit;
+- SPEF / IEEE 1481-1999 (Representation format);
+
+### Power distribution @ OpenLANE
+
+You can recap the run after CTS on openlane console using -tag, then:
+
+        % gen_pdn
+
+The command generate the power and ground distribution as we can see on the report from openlane console on the image below
+
+![s21](https://github.com/britovski/vsdOpenLANE/blob/main/images/s27.PNG)
+
+Note that Std Cell rails has a met1 pitch 2.72 that is the height of the sky130_vsdinv top view, in order to be possible to get Vdd and Gnd connections from thi step. See also power stripes.
+
+Next step is routing.
+
+### Routing @ OpenLANE
+
+Global routing is performed before by FastRoute. Now, detailed routing is performed by TritonRoute (see paper about it).
+
+        % run_routing
+
+Then you can open the post-routing layout using Magic and see image below.
+
+![s22](https://github.com/britovski/vsdOpenLANE/blob/main/images/s28.PNG)
+
+And zooming
+
+![s23](https://github.com/britovski/vsdOpenLANE/blob/main/images/s29.PNG)
+
+You can explore configurations (eg. env ROUTING_STRATEGY)
+
+**ROUTING_STRATEGY 14 converges for a 0 DRC erros**
+
+### Parasitics extraction with SPEF Extractor
+
+You can use SPEF_EXTRACTOR to get a .spef file with parasitics extraction after routing.
+
+        cd SPEF_EXTRACTOR
+        python3 main.py <.lef> <.def>
+
+The .lef file is the _merged.lef_ and .def file is the _picorv32a_ from /results/routing folder. See image below with the command execution.
+
+![s24](https://github.com/britovski/vsdOpenLANE/blob/main/images/s30.PNG)
+
+### Sign-off post-route STA
+
+For post-route STA you need to create a new .db with the new .def (from post-route) using the verilog file from pre-route (_picorv32a.synthesis_preroute.v_). Use the same .sdc and add a new command to read .spef file (_% read_spef_)
+
+The command below will streams out the final GDSII file
+
+        % run_magic
+
+## Final notes
+
+Really good workshop to learn advanced PnR with new OpenLANE flow and using Google-Skywater 130 _nm_ open source PDK.
+
+I recommend to attend Beginner VLSI/SoC Physical Design using open source EDA tools 5-day workshop before ([see my repo here](https://github.com/britovski/vsdBasicPD)).
+
+## Acknowledgement
+
+Kunal Ghosh, Co-founder (VSD Corp. Pvt. Ltd)
+Nickson Jose, VLSI Engineer
