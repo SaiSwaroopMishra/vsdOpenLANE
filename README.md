@@ -44,11 +44,12 @@ An example of ASIC Design using _open everything_ (RTL+EDA+PDK open sources) are
 
 The input of the ASIC flow is the RTL and the output is GDSII. All the steps need to be assisted using the Process Design Kit (PDK). Below image shows the ASIC flows implemented by OpenLANE and the open source EDA tools used in each design step.
 
-IMAGE openlane.
+![openlane_flow](https://github.com/efabless/openlane/blob/master/doc/openlane.flow.1.png)
 
 The main goal of the OpenLANE is to produce clean GDSII with no human intervention (fully automated).
 - two modes: autonomous or interactive;
 
+More about OpenLANE can be found on [github](https://www.udemy.com/course/vsd-a-complete-guide-to-install-openlane-and-sky130nm-pdk/).
 
 <!--An introduction to IC Design flow and tools are performed. The goal is to show the RTL2GDS flow using opensource tools.
 - Beginning with logic synthesis (using Yosys);
@@ -67,6 +68,8 @@ After an OpenLANE presentation, some hands-on activities are performed to show d
 
 ### Hands-on Labs
 Some labs are performed using web based linux virtual machine with pre-configured open source tools based on OpenLANE flow.
+
+More about the tools installation can be found on [this udemy course](https://www.udemy.com/course/vsd-a-complete-guide-to-install-openlane-and-sky130nm-pdk/) by Kunal Ghosh and Nickson Jose.
 
 **First step is to get familiar with basis linux commands**
 
@@ -91,13 +94,22 @@ Some labs are performed using web based linux virtual machine with pre-configure
     ./flow.tcl -interactive
     % package require openlane 0.9
     % prep -design picorv32a
-    % run_synthesis
-
+ 
 The above commands begins the OpenLANE flow in interactive mode for picorv32a. Below image shows this start.
 
-IMAGE 1
+![s1](https://github.com/britovski/vsdOpenLANE/blob/main/images/s3.PNG)
 
 We can also explore the openlane runs directory to know the structure (\reports, \results, \tmp, ...)
+
+First step of the flow is the _synthesis_. You can run at openlane % as
+
+       % run_synthesis
+
+and get results about synthesis, mapping and post-synthesis timing analysis. Below is possible to see openlane terminal after the command.
+
+
+![s2](https://github.com/britovski/vsdOpenLANE/blob/main/images/s4.PNG)
+
 
 ## Day 2
 
